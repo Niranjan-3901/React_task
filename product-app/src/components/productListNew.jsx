@@ -1,5 +1,8 @@
 import axios from "axios";
-import React, { useEffect, useState } from "react";
+import React, {
+    useEffect,
+    useState
+} from "react";
 import {
     Autocomplete,
     Box,
@@ -9,39 +12,38 @@ import {
     Grid,
     Stack,
     TextField,
+    Pagination
 } from "@mui/material";
-import { GoSortAsc, GoSortDesc } from "react-icons/go";
+import {
+    GoSortAsc,
+    GoSortDesc
+} from "react-icons/go";
 import ProductCard from "./ProductCard";
 
 function ProductListNew() {
-    const axiosClient = axios.create({
+    const axiosClientBytexl = axios.create({
         baseURL: "https://json-server-c67opnddza-el.a.run.app",
     });
-    const [totalProduct, setTotalProduct] = useState(undefined);
-    const [productList, setProducts] = useState([]);
+
+    const [productList, setProductsList] = useState([]);
     const [categoryList, setCategoryList] = useState(["All"]);
-    const [categorySelect, setCategorySelect] = useState("All");
+    const [categorySelect, setCategorySelect] = useState("");
     const [companyList, setCompanyList] = useState(["All"]);
-    const [companySelect, setCompanySelect] = useState("All");
+    const [companySelect, setCompanySelect] = useState("");
     const [sortOption, setSortOption] = useState("");
     const [sortBasis, setSortBasis] = useState("Ascending");
-    const [availability, setAvailability] = useState("All");
-    const [topProducts, setTopProducts] = useState("");
+    const [availability, setAvailability] = useState("");
     const [minPrice, setMinPrice] = useState("");
     const [maxPrice, setMaxPrice] = useState("");
-    let query = `?top=${topProducts || 5}&availability=${availability}&minPrice=${minPrice || 0
+    const [rating, setRating] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 9;
+
+    let query = `?&availability=${availability}&minPrice=${minPrice || 0
         }&maxPrice=${maxPrice || 5000}`;
 
     useEffect(() => {
-        axiosClient
-            .get("/products")
-            .then((response) => {
-                setProducts(response.data);
-                setTotalProduct(response.data.length);
-            })
-            .catch((err) => console.error(err));
-
-        axiosClient
+        axiosClientBytexl
             .get("/companies")
             .then((response) => {
                 setCompanyList(
@@ -53,91 +55,111 @@ function ProductListNew() {
             })
             .catch((err) => console.error(err));
 
-        axiosClient
+        axiosClientBytexl
             .get("/categories")
             .then((response) => {
-                setCategoryList(response.data.map((item) => item.name));
+                setCategoryList(
+                    response.data.map((item) => {
+                        return item.name
+                    }
+                    ));
             })
             .catch((err) => console.error(err));
     }, []);
 
     useEffect(() => {
-        if (topProducts > totalProduct) {
-            setTopProducts(totalProduct);
-        }
         if (
             categorySelect &&
             companySelect &&
             categorySelect !== "All" &&
-            companySelect !== "All"
+            companySelect.substring(0, 3) !== "All"
         ) {
-            axiosClient
+            axiosClientBytexl
                 .get(
                     `/companies/${companySelect.substring(
-                        0,
-                        3
+                        0, 3
                     )}/categories/${categorySelect}/products` + query
                 )
                 .then((response) => {
-                    setProducts(response.data);
-                })
-                .catch((err) => console.error(err));
-        } 
-        
-        else if (categorySelect && categorySelect !== "All") {
-            axiosClient
-                .get(`/categories/${categorySelect}/products` + query)
-                .then((response) => {
-                    setProducts(response.data);
-                })
-                .catch((err) => console.error(err));
-        } 
-        
-        else if (companySelect && companySelect !== "All") {
-            axiosClient
-                .get(`/companies/${companySelect.substring(0, 3)}/products` + query)
-                .then((response) => {
-                    setProducts(response.data);
-                })
-                .catch((err) => console.error(err));
-        } 
-        
-        else {
-            axiosClient
-                .get("/products")
-                .then((response) => {
-                    setProducts(response.data);
+                    setProductsList(SortingFunction(response.data));
                 })
                 .catch((err) => console.error(err));
         }
+
+        else if (categorySelect && categorySelect !== "All") {
+            axiosClientBytexl
+                .get(`/categories/${categorySelect}/products` + query)
+                .then((response) => {
+                    setProductsList(SortingFunction(response.data));
+                })
+                .catch((err) => console.error(err));
+        }
+
+        else if (companySelect && companySelect.substring(0, 3) !== "All") {
+            axiosClientBytexl
+                .get(`/companies/${companySelect.substring(0, 3)}/products` + query)
+                .then((response) => {
+                    setProductsList(SortingFunction(response.data));
+                })
+                .catch((err) => console.error(err));
+        }
+
+        else {
+            axiosClientBytexl
+                .get("/products")
+                .then((response) => {
+                    console.log(availability)
+                    if (availability && availability !== "All") {
+                        setProductsList(SortingFunction(response.data.filter((product) => {
+                            return product.availability === availability
+                        }
+                        )));
+                    }
+                    else {
+                        setProductsList(SortingFunction(response.data));
+                    }
+                })
+                .catch((err) => console.error(err));
+        }
+        setCurrentPage(1)
     }, [
         categorySelect,
         companySelect,
         availability,
-        topProducts,
         minPrice,
         maxPrice,
     ]);
 
     useEffect(() => {
-        let sorted = [...productList];
+        setProductsList(SortingFunction(productList));
+    }, [sortOption, sortBasis, rating]);
+
+    const SortingFunction = (data) => {
+        let sortedList = [...data];
+
+        if (rating) {
+            sortedList = sortedList.filter((item) => {
+                return item.rating >= rating;
+            })
+        }
+
         if (sortOption) {
-            sorted.sort((a, b) => {
-                if (sortOption === "price") {
+            sortedList.sort((a, b) => {
+                if (sortOption.toLowerCase() === "price") {
                     return a.price - b.price;
-                } else if (sortOption === "rating") {
+                } else if (sortOption.toLowerCase() === "rating") {
                     return b.rating - a.rating;
-                } else if (sortOption === "discount") {
+                } else if (sortOption.toLowerCase() === "discount") {
                     return b.discount - a.discount;
-                } else if (sortOption === "name") {
+                } else if (sortOption.toLowerCase() === "name") {
                     return a.productName.localeCompare(b.productName);
                 }
                 return 0;
             });
-            if (sortBasis === "Descending") sorted.reverse();
+            if (sortBasis === "Descending") sortedList.reverse();
         }
-        setProducts(sorted);
-    }, [sortOption, sortBasis]);
+        return sortedList
+    }
 
     const handleResetButtonClick = () => {
         setCategorySelect("All");
@@ -145,7 +167,6 @@ function ProductListNew() {
         setSortOption("All");
         setSortBasis("Ascending");
         setAvailability("All");
-        setTopProducts("All");
         setMinPrice("");
         setMaxPrice("");
     };
@@ -179,116 +200,156 @@ function ProductListNew() {
                 </Box>
             );
         } else {
-            return productList.map((product) => (
-                <Grid item xs={12} sm={6} md={4} key={product.id}>
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const paginatedData = productList.slice(startIndex, endIndex);
+
+
+            return paginatedData.map((product) => (
+                <Grid
+                    item
+                    key={product.id}
+                    md={4}
+                    sm={6}
+                    xs={12}
+                    >
                     <ProductCard product={product} />
                 </Grid>
             ));
         }
     };
 
+    const handlePageChange = (_, value) => {
+        setCurrentPage(value);
+    };
+
     return (
         <Container>
             <Box
                 sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
                     alignItems: "center",
+                    display: "flex",
                     height: "fit-content",
+                    justifyContent: "space-between",
                 }}
             >
                 <h1>All Products</h1>
-                <Button variant="outlined" onClick={handleResetButtonClick}>
+                <Button
+                    onClick={handleResetButtonClick}
+                    variant="outlined"
+                >
                     Clear Filters
                 </Button>
             </Box>
-            <Grid container spacing={2}>
-                <Grid item xs={12} padding={"0 28px"}>
+            <Grid
+                container
+                spacing={2}
+                sx={{ paddingLeft: "0px" }}
+                width={"100%"}
+            >
+                <Grid item xs={12}
+                    padding={"5px"}
+                >
                     <Box
                         display={"flex"}
-                        justifyContent={"space-between"}
+                        flex={1}
                         flexWrap={"wrap"}
+                        justifyContent={"space-between"}
+                        sx={{ padding: "0px" }}
                     >
                         <Autocomplete
                             disablePortal
                             id="combo-box-category"
-                            value={categorySelect}
+                            isOptionEqualToValue={(option, value) =>
+                                option.name === value.name
+                            }
                             onChange={(_, newValue) => {
                                 setCategorySelect(newValue);
                             }}
                             options={[...categoryList, "All"]}
-                            sx={{ width: 200 }}
-                            isOptionEqualToValue={(option, value) =>
-                                option.name === value.name
-                            }
                             renderInput={(params) => (
                                 <TextField {...params} label="Category" />
                             )}
+                            sx={{ width: "160px" }}
+                            value={categorySelect}
                         />
                         <Autocomplete
                             disablePortal
                             id="combo-box-company"
-                            value={companySelect}
-                            onChange={(_, newValue) => {
-                                setCompanySelect(newValue);
-                            }}
-                            options={[...companyList, { desc: "All", name: "All" }].map(
-                                (item) => `${item.name} (${item.desc})`
-                            )}
-                            sx={{ width: 200 }}
                             isOptionEqualToValue={(option, value) =>
                                 option.name === value.name
                             }
+                            onChange={(_, newValue) => {
+                                setCompanySelect(newValue);
+                            }}
+                            options={[...companyList,
+                            { desc: "All", name: "All" }
+                            ].map(
+                                (item) => `${item.name} (${item.desc})`
+                            )}
                             renderInput={(params) => (
                                 <TextField {...params} label="Company" />
                             )}
+                            sx={{ width: "160px" }}
+                            value={companySelect}
                         />
                         <Autocomplete
                             disablePortal
-                            id="combo-box-availability"
-                            value={availability}
-                            onChange={(_, newValue) => {
-                                setAvailability(newValue);
-                            }}
-                            options={["All", "yes", "no"]}
                             getOptionLabel={(option) =>
                                 option === "yes"
-                                    ? "Stock Available"
+                                    ? "In Stock"
                                     : option === "no"
                                         ? "Out of Stock"
                                         : "All"
                             }
-                            sx={{ width: 200 }}
+                            id="combo-box-availability"
                             isOptionEqualToValue={(option, value) =>
                                 option.name === value.name
                             }
+                            onChange={(_, newValue) => {
+                                setAvailability(newValue);
+                            }}
+                            options={[
+                                "All",
+                                "yes",
+                                "no"]
+                            }
+                            sx={{ width: "160px" }}
                             renderInput={(params) => (
                                 <TextField {...params} label="Availability" />
                             )}
+                            value={availability}
                         />
                         <Autocomplete
                             disablePortal
-                            value={sortOption}
+                            getOptionLabel={(option) => option}
                             id="combo-box-sort"
+                            isOptionEqualToValue={(option, value) =>
+                                option.name === value.name
+                            }
                             onChange={(_, newValue) => {
                                 setSortOption(newValue);
                             }}
-                            options={["name", "price", "rating", "discount"]}
-                            getOptionLabel={(option) => option}
-                            sx={{ width: 200 }}
-                            isOptionEqualToValue={(option, value) =>
-                                option.name === value.name
+                            options={[
+                                "Name",
+                                "Price",
+                                "Rating",
+                                "Discount"]
                             }
                             renderInput={(params) => (
                                 <TextField {...params} label="Sort By" />
                             )}
+                            sx={{ width: "160px" }}
+                            value={sortOption}
                         />
                         {sortBasis === "Ascending" ? (
                             <Button
                                 disabled={sortOption ? false : true}
-                                variant="outlined"
-                                startIcon={<GoSortDesc height="100%" width="100%" />}
                                 onClick={() => setSortBasis("Descending")}
+                                startIcon={<GoSortDesc
+                                    height="100%"
+                                    width="100%" />}
+                                variant="outlined"
                             >
                                 Desc
                             </Button>
@@ -296,7 +357,9 @@ function ProductListNew() {
                             <Button
                                 disabled={sortOption ? false : true}
                                 variant="outlined"
-                                startIcon={<GoSortAsc height="100%" width="100%" />}
+                                startIcon={<GoSortAsc
+                                    height="100%"
+                                    width="100%" />}
                                 onClick={() => setSortBasis("Ascending")}
                             >
                                 Asce
@@ -305,15 +368,18 @@ function ProductListNew() {
                     </Box>
                 </Grid>
                 <Grid item xs={12}>
-                    <Stack direction={"row"} justifyContent={"space-around"}>
+                    <Stack
+                        direction={"row"}
+                        justifyContent={"space-around"}
+                    >
                         <TextField
                             disabled={!isFilteredApplied() ? true : false}
                             variant="outlined"
                             type="number"
-                            label="First Top Products"
-                            value={topProducts}
+                            label="Min Rating"
+                            value={rating}
                             onChange={(event) => {
-                                setTopProducts(event.target.value);
+                                setRating(event.target.value);
                             }}
                         />
                         <TextField
@@ -339,11 +405,26 @@ function ProductListNew() {
                     </Stack>
                 </Grid>
                 <Grid item xs={12}>
-                    <Grid container spacing={2} justify="space-between">
+                    <Grid
+                        container
+                        spacing={2}
+                        justify="space-between"
+                        flex={1}
+                    >
                         {showData()}
                     </Grid>
                 </Grid>
             </Grid>
+            <Stack
+                direction={"row"}
+                justifyContent="center"
+            >
+                <Pagination
+                    count={Math.ceil(productList.length / itemsPerPage)}
+                    onChange={handlePageChange}
+                    page={currentPage}
+                />
+            </Stack>
         </Container>
     );
 }
